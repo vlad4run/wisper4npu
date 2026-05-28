@@ -26,6 +26,7 @@ class Config:
     endpoint: str = "http://localhost:52625"
     model: str = "whisper-v3:turbo"
     language: str | None = None
+    languages: list[str] = field(default_factory=lambda: ["ru", "en"])
     sample_rate: int = 16000
     input_device: str | None = None
     outputs: list[str] = field(default_factory=lambda: ["clipboard", "notify"])

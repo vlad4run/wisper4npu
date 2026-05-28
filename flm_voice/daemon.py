@@ -57,14 +57,47 @@ class Daemon:
         assert self._stop_event is not None
         return self._stop_event
 
-    async def handle_command(self, cmd: str) -> dict[str, Any]:
+    def _status_snapshot(self, extra: dict[str, Any] | None = None) -> dict[str, Any]:
+        snap: dict[str, Any] = {
+            "ok": True,
+            "state": self.state.value,
+            "language": self.cfg.language or "auto",
+        }
+        if extra:
+            snap.update(extra)
+        return snap
+
+    def _set_language(self, value: str | None) -> str:
+        if value is None or value == "auto":
+            self.cfg.language = None
+        else:
+            self.cfg.language = value
+        display = self.cfg.language or "auto"
+        output.notify("flm-voice", f"language: {display}")
+        log.info("language set to %s", display)
+        return display
+
+    def _cycle_language(self) -> str:
+        langs = self.cfg.languages or []
+        if not langs:
+            return self.cfg.language or "auto"
+        current = self.cfg.language or "auto"
+        try:
+            idx = langs.index(current)
+        except ValueError:
+            idx = -1
+        next_value = langs[(idx + 1) % len(langs)]
+        return self._set_language(next_value)
+
+    async def handle_command(self, msg: dict[str, Any]) -> dict[str, Any]:
+        cmd = msg.get("cmd", "")
         async with self.lock:
             if cmd == "status":
-                return {"ok": True, "state": self.state.value}
+                return self._status_snapshot()
 
             if cmd == "stop":
                 self.stop_event.set()
-                return {"ok": True, "state": self.state.value, "stopping": True}
+                return self._status_snapshot({"stopping": True})
 
             if cmd == "cancel":
                 if self.state == State.RECORDING:
@@ -72,7 +105,7 @@ class Daemon:
                     await asyncio.to_thread(self.recorder.stop)
                     self.state = State.IDLE
                     output.notify("flm-voice", "cancelled")
-                return {"ok": True, "state": self.state.value}
+                return self._status_snapshot()
 
             if cmd == "toggle":
                 if self.state == State.IDLE:
@@ -80,9 +113,17 @@ class Daemon:
                 if self.state == State.RECORDING:
                     return await self._stop_and_dispatch_locked(reason="toggle")
                 output.notify("flm-voice", "still transcribing previous recording…")
-                return {"ok": False, "state": self.state.value, "reason": "busy"}
+                return self._status_snapshot({"ok": False, "reason": "busy"})
 
-            return {"ok": False, "error": f"unknown command: {cmd}"}
+            if cmd == "lang_set":
+                self._set_language(msg.get("value"))
+                return self._status_snapshot()
+
+            if cmd == "lang_next":
+                self._cycle_language()
+                return self._status_snapshot()
+
+            return {"ok": False, "error": f"unknown command: {cmd!r}"}
 
     async def _start_recording_locked(self) -> dict[str, Any]:
         try:
@@ -96,7 +137,7 @@ class Daemon:
         self._max_duration_task = asyncio.create_task(self._max_duration_watchdog())
         if self.cfg.auto_stop:
             self._vad_task = asyncio.create_task(self._vad_watchdog())
-        return {"ok": True, "state": self.state.value}
+        return self._status_snapshot()
 
     async def _stop_and_dispatch_locked(self, reason: str) -> dict[str, Any]:
         self._cancel_watchdogs()
@@ -104,7 +145,7 @@ class Daemon:
         self.state = State.TRANSCRIBING
         log.info("captured %d bytes (reason=%s)", len(wav), reason)
         self._inflight = asyncio.create_task(self._transcribe_and_output(wav))
-        return {"ok": True, "state": self.state.value, "bytes": len(wav), "reason": reason}
+        return self._status_snapshot({"bytes": len(wav), "reason": reason})
 
     def _cancel_watchdogs(self) -> None:
         current = asyncio.current_task()
@@ -218,7 +259,10 @@ async def _client_handler(
         except json.JSONDecodeError as exc:
             resp: dict[str, Any] = {"ok": False, "error": f"bad json: {exc}"}
         else:
-            resp = await daemon.handle_command(msg.get("cmd", ""))
+            if not isinstance(msg, dict):
+                resp = {"ok": False, "error": "request must be a JSON object"}
+            else:
+                resp = await daemon.handle_command(msg)
     except Exception as exc:
         log.exception("handler error")
         resp = {"ok": False, "error": str(exc)}

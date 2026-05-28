@@ -84,8 +84,10 @@ In a terminal (or via the systemd `--user` unit in
 ```
 
 Then follow the printed steps in **System Settings → Shortcuts → Custom
-Shortcuts** to bind `Meta+Alt+Space` (or any combo) to
-`.venv/bin/flm-voice toggle`.
+Shortcuts** to bind:
+
+- `Meta+Alt+Space` → `.venv/bin/flm-voice toggle` *(start/stop recording)*
+- `Meta+Alt+L` → `.venv/bin/flm-voice lang next` *(cycle language; see notify-send popup for the new value)*
 
 ### 6. Talk
 
@@ -167,7 +169,8 @@ whisper.npu/
 - **Phase 5** — Output backends wired into the daemon.
   *(`output.py`)*
 - **Phase 6** *(partially done)* — energy-based VAD auto-stop, max-duration
-  cap, FLM warm-up. Tray icon and multi-language switching are still TODO.
+  cap, FLM warm-up, live language switching via `flm-voice lang`. Tray icon
+  is still TODO (depends on PyQt from phase 4).
 
 ### Minimal MVP
 
@@ -196,7 +199,8 @@ Optional `$XDG_CONFIG_HOME/flm-voice/config.toml`:
 ```toml
 endpoint = "http://localhost:52625"
 model = "whisper-v3:turbo"
-language = "ru"                       # ISO-639-1; omit to auto-detect
+language = "ru"                       # ISO-639-1; omit or set to nothing for auto-detect
+languages = ["ru", "en"]              # cycled by `flm-voice lang next`; add "auto" to include auto-detect
 sample_rate = 16000
 # input_device = "alsa_input.pci-0000_..."
 outputs = ["clipboard", "notify"]     # also: "type" (wtype/ydotool)
@@ -220,6 +224,9 @@ vad_rms_threshold = 500.0             # higher = needs louder speech
 | `flm-voice cancel` | Discard the current recording without transcribing. |
 | `flm-voice stop` | Tell the daemon to exit cleanly. |
 | `flm-voice oneshot --duration 5` | Record N seconds and print the transcript (no daemon). |
+| `flm-voice lang` | Show the current transcription language. |
+| `flm-voice lang next` | Cycle to the next language in `cfg.languages`. |
+| `flm-voice lang ru` / `lang en` / `lang auto` | Set the language explicitly. `auto` clears the hint and lets Whisper detect. |
 
 ## Development
 
