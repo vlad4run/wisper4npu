@@ -202,3 +202,28 @@ scripts/build-binary.sh
 The script uses PyInstaller in `--onefile` mode. Drop `dist/flm-voice` into
 `~/.local/bin/`, point your systemd unit's `ExecStart=` at it, and the
 Python source tree is no longer needed at runtime.
+
+## RPM package (openSUSE)
+
+For installing system-wide via the package manager:
+
+```bash
+sudo zypper install rpm-build      # one-time
+scripts/build-rpm.sh
+sudo zypper install ~/rpmbuild/RPMS/x86_64/flm-voice-*.rpm
+```
+
+The package installs:
+
+- `/usr/bin/flm-voice` — the PyInstaller binary
+- `/usr/lib/systemd/user/flm-voice.service` — systemd user unit
+- `/usr/share/doc/packages/flm-voice/README.md`
+- `/usr/share/licenses/flm-voice/LICENSE`
+
+Hard dep: `libportaudio2`. Soft deps (`Recommends:`):
+`wl-clipboard`, `libnotify-tools`. After install:
+
+```bash
+systemctl --user enable --now flm-voice
+./scripts/install-kde-hotkey.sh   # prints hotkey-binding steps
+```

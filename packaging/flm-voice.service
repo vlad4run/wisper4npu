@@ -1,0 +1,13 @@
+[Unit]
+Description=flm-voice daemon (hotkey voice-to-text for KDE Plasma Wayland)
+After=graphical-session.target
+PartOf=graphical-session.target
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/flm-voice daemon
+Restart=on-failure
+RestartSec=2
+
+[Install]
+WantedBy=graphical-session.target
