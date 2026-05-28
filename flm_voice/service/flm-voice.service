@@ -5,6 +5,9 @@ PartOf=graphical-session.target
 
 [Service]
 Type=simple
+# Adjust ExecStart to your install location:
+#   pipx install -e .   -> %h/.local/bin/flm-voice
+#   pip install -e .    inside a venv -> /full/path/to/.venv/bin/flm-voice
 ExecStart=%h/.local/bin/flm-voice daemon
 Restart=on-failure
 RestartSec=2

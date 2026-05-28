@@ -84,14 +84,19 @@ class Recorder:
             if self._stream is not None:
                 return
             self._chunks = []
-            self._stream = sd.InputStream(
+            stream = sd.InputStream(
                 samplerate=self.sample_rate,
                 channels=1,
                 dtype="int16",
                 device=self.device,
                 callback=self._callback,
             )
-            self._stream.start()
+            try:
+                stream.start()
+            except Exception:
+                stream.close()
+                raise
+            self._stream = stream
 
     def stop(self) -> bytes:
         with self._lock:

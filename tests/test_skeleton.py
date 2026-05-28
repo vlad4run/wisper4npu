@@ -1,4 +1,4 @@
-"""Phase-0 sanity checks: package imports cleanly and CLI builds."""
+"""Sanity checks: package imports cleanly, CLI builds, IPC fails gracefully."""
 from __future__ import annotations
 
 import pytest

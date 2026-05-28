@@ -1,10 +1,13 @@
 """Configuration loaded from $XDG_CONFIG_HOME/flm-voice/config.toml."""
 from __future__ import annotations
 
+import logging
 import os
 import tomllib
 from dataclasses import dataclass, field
 from pathlib import Path
+
+log = logging.getLogger(__name__)
 
 
 def config_dir() -> Path:
@@ -45,5 +48,8 @@ class Config:
             return cls()
         with path.open("rb") as f:
             data = tomllib.load(f)
-        known = {k: v for k, v in data.items() if k in cls.__dataclass_fields__}
-        return cls(**known)
+        fields = cls.__dataclass_fields__
+        unknown = sorted(set(data) - set(fields))
+        if unknown:
+            log.warning("ignoring unknown config keys in %s: %s", path, unknown)
+        return cls(**{k: v for k, v in data.items() if k in fields})

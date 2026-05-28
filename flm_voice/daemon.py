@@ -300,12 +300,22 @@ async def _serve(daemon: Daemon) -> None:
             await daemon.stop_event.wait()
     finally:
         daemon._cancel_watchdogs()
-        if not warmup_task.done():
-            warmup_task.cancel()
+        await _drain_task(warmup_task)
+        await _drain_task(daemon._inflight)
         if daemon.recorder.is_recording:
             await asyncio.to_thread(daemon.recorder.stop)
         sock.unlink(missing_ok=True)
         log.info("daemon exited")
+
+
+async def _drain_task(task: asyncio.Task[Any] | None) -> None:
+    if task is None or task.done():
+        return
+    task.cancel()
+    try:
+        await task
+    except (asyncio.CancelledError, Exception):
+        pass
 
 
 def run() -> int:

@@ -1,6 +1,6 @@
-"""Line-delimited JSON over Unix socket: client helpers + protocol constants.
+"""Line-delimited JSON over Unix socket: client side.
 
-The server side lives in `flm_voice.daemon` (phase 2).
+Server-side handler lives in `flm_voice.daemon`.
 """
 from __future__ import annotations
 
@@ -10,8 +10,6 @@ import sys
 from typing import Any
 
 from flm_voice.config import socket_path
-
-PROTOCOL_VERSION = 1
 
 
 def send_command(cmd: str, **kwargs: Any) -> int:

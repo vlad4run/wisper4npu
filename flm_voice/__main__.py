@@ -1,4 +1,4 @@
-"""flm-voice CLI entry point: daemon | toggle | status | stop | oneshot."""
+"""flm-voice CLI: daemon | toggle | status | stop | cancel | oneshot | lang."""
 from __future__ import annotations
 
 import argparse

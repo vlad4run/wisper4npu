@@ -1,4 +1,4 @@
-"""Phase-0 smoke test: record N seconds, POST to FLM, print round-trip latency.
+"""Smoke test: record N seconds, POST to FLM, print round-trip latency.
 
 Usage:
     python -m scripts.bench_transcribe --duration 5
