@@ -24,10 +24,12 @@ the NPU prerequisites, kernel driver setup, and Docker image build.
 
 ## Status
 
-**MVP working** — phases 1-2 implemented. Recorder, daemon, IPC, and
-clipboard/notify output all work; the daemon happily survives a missing
-FLM container (transcription errors are caught and reported via notification).
-Phases 3 (KDE hotkey wiring) and 4 (PyQt overlay) are still pending.
+**MVP + phase-6 polish working** — phases 1-2 and the safety/UX bits from
+phase 6 are implemented. The daemon also auto-stops on a hard duration cap
+and (optionally) when the user stops talking; it warms FLM up at startup so
+the first real transcription isn't cold. Connection-refused errors against a
+not-yet-running FLM container produce a clean WARNING + notification.
+Phase 3 (KDE hotkey wiring) and phase 4 (PyQt overlay) are still pending.
 
 ## MVP setup
 
@@ -164,8 +166,8 @@ whisper.npu/
   *(`overlay/indicator.py`, `overlay/result.py`)*
 - **Phase 5** — Output backends wired into the daemon.
   *(`output.py`)*
-- **Phase 6** *(optional)* — VAD auto-stop (`silero-vad`), warm-up, tray icon,
-  multi-language switching.
+- **Phase 6** *(partially done)* — energy-based VAD auto-stop, max-duration
+  cap, FLM warm-up. Tray icon and multi-language switching are still TODO.
 
 ### Minimal MVP
 
@@ -198,6 +200,14 @@ language = "ru"                       # ISO-639-1; omit to auto-detect
 sample_rate = 16000
 # input_device = "alsa_input.pci-0000_..."
 outputs = ["clipboard", "notify"]     # also: "type" (wtype/ydotool)
+
+# Phase-6 polish
+warmup = true                         # POST a 1s silent WAV at daemon startup
+max_duration_sec = 300                # hard cap; auto-stops + transcribes
+auto_stop = false                     # opt-in: silence-detection auto-stop
+auto_stop_silence_sec = 1.5           # required quiet window after first speech
+auto_stop_min_record_sec = 0.8        # never auto-stop in the first N seconds
+vad_rms_threshold = 500.0             # higher = needs louder speech
 ```
 
 ## CLI reference

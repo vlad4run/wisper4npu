@@ -22,6 +22,11 @@ def _to_wav_bytes(samples: np.ndarray, sample_rate: int) -> bytes:
     return buf.getvalue()
 
 
+def silent_wav(duration: float, sample_rate: int = 16000) -> bytes:
+    samples = np.zeros(int(duration * sample_rate), dtype=np.int16)
+    return _to_wav_bytes(samples, sample_rate)
+
+
 def record_to_wav(
     duration: float,
     sample_rate: int = 16000,
@@ -57,6 +62,22 @@ class Recorder:
     @property
     def is_recording(self) -> bool:
         return self._stream is not None
+
+    def current_duration(self) -> float:
+        with self._lock:
+            total = sum(c.size for c in self._chunks)
+        return total / self.sample_rate
+
+    def peek_recent(self, seconds: float) -> np.ndarray:
+        target = int(seconds * self.sample_rate)
+        with self._lock:
+            chunks = list(self._chunks)
+        if not chunks:
+            return np.zeros(0, dtype=np.int16)
+        flat = np.concatenate([c.reshape(-1) for c in chunks])
+        if flat.size > target:
+            flat = flat[-target:]
+        return flat
 
     def start(self) -> None:
         with self._lock:

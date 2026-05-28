@@ -31,6 +31,13 @@ class Config:
     outputs: list[str] = field(default_factory=lambda: ["clipboard", "notify"])
     auto_action: str | None = None
     show_overlay: bool = True
+    # Phase-6 polish
+    max_duration_sec: float = 300.0
+    warmup: bool = True
+    auto_stop: bool = False
+    auto_stop_silence_sec: float = 1.5
+    auto_stop_min_record_sec: float = 0.8
+    vad_rms_threshold: float = 500.0
 
     @classmethod
     def load(cls) -> Config:

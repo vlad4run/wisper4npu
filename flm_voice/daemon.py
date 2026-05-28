@@ -12,9 +12,11 @@ import signal
 from enum import Enum
 from typing import Any
 
-from flm_voice import output
+import httpx
+
+from flm_voice import output, vad
 from flm_voice.config import Config, socket_path
-from flm_voice.recorder import Recorder
+from flm_voice.recorder import Recorder, silent_wav
 from flm_voice.transcriber import transcribe_async
 
 log = logging.getLogger("flm-voice")
@@ -34,6 +36,8 @@ class Daemon:
         self._lock: asyncio.Lock | None = None
         self._stop_event: asyncio.Event | None = None
         self._inflight: asyncio.Task[None] | None = None
+        self._max_duration_task: asyncio.Task[None] | None = None
+        self._vad_task: asyncio.Task[None] | None = None
 
     def _ensure_async_primitives(self) -> None:
         if self._lock is None:
@@ -42,15 +46,19 @@ class Daemon:
             self._stop_event = asyncio.Event()
 
     @property
+    def lock(self) -> asyncio.Lock:
+        self._ensure_async_primitives()
+        assert self._lock is not None
+        return self._lock
+
+    @property
     def stop_event(self) -> asyncio.Event:
         self._ensure_async_primitives()
         assert self._stop_event is not None
         return self._stop_event
 
     async def handle_command(self, cmd: str) -> dict[str, Any]:
-        self._ensure_async_primitives()
-        assert self._lock is not None
-        async with self._lock:
+        async with self.lock:
             if cmd == "status":
                 return {"ok": True, "state": self.state.value}
 
@@ -60,6 +68,7 @@ class Daemon:
 
             if cmd == "cancel":
                 if self.state == State.RECORDING:
+                    self._cancel_watchdogs()
                     await asyncio.to_thread(self.recorder.stop)
                     self.state = State.IDLE
                     output.notify("flm-voice", "cancelled")
@@ -67,15 +76,15 @@ class Daemon:
 
             if cmd == "toggle":
                 if self.state == State.IDLE:
-                    return await self._start_recording()
+                    return await self._start_recording_locked()
                 if self.state == State.RECORDING:
-                    return await self._stop_and_dispatch()
+                    return await self._stop_and_dispatch_locked(reason="toggle")
                 output.notify("flm-voice", "still transcribing previous recording…")
                 return {"ok": False, "state": self.state.value, "reason": "busy"}
 
             return {"ok": False, "error": f"unknown command: {cmd}"}
 
-    async def _start_recording(self) -> dict[str, Any]:
+    async def _start_recording_locked(self) -> dict[str, Any]:
         try:
             await asyncio.to_thread(self.recorder.start)
         except Exception as exc:
@@ -84,17 +93,80 @@ class Daemon:
             return {"ok": False, "error": str(exc)}
         self.state = State.RECORDING
         output.notify("flm-voice", "recording…", icon="audio-input-microphone")
+        self._max_duration_task = asyncio.create_task(self._max_duration_watchdog())
+        if self.cfg.auto_stop:
+            self._vad_task = asyncio.create_task(self._vad_watchdog())
         return {"ok": True, "state": self.state.value}
 
-    async def _stop_and_dispatch(self) -> dict[str, Any]:
+    async def _stop_and_dispatch_locked(self, reason: str) -> dict[str, Any]:
+        self._cancel_watchdogs()
         wav = await asyncio.to_thread(self.recorder.stop)
         self.state = State.TRANSCRIBING
+        log.info("captured %d bytes (reason=%s)", len(wav), reason)
         self._inflight = asyncio.create_task(self._transcribe_and_output(wav))
-        return {"ok": True, "state": self.state.value, "bytes": len(wav)}
+        return {"ok": True, "state": self.state.value, "bytes": len(wav), "reason": reason}
+
+    def _cancel_watchdogs(self) -> None:
+        current = asyncio.current_task()
+        for attr in ("_max_duration_task", "_vad_task"):
+            task = getattr(self, attr)
+            if task is not None and task is not current and not task.done():
+                task.cancel()
+            setattr(self, attr, None)
+
+    async def _max_duration_watchdog(self) -> None:
+        try:
+            await asyncio.sleep(self.cfg.max_duration_sec)
+        except asyncio.CancelledError:
+            return
+        async with self.lock:
+            if self.state != State.RECORDING:
+                return
+            log.info("max duration %.1fs reached, auto-stopping", self.cfg.max_duration_sec)
+            output.notify("flm-voice", f"max duration reached ({int(self.cfg.max_duration_sec)}s)")
+            await self._stop_and_dispatch_locked(reason="max-duration")
+
+    async def _vad_watchdog(self) -> None:
+        speech_seen = False
+        silence_sec = self.cfg.auto_stop_silence_sec
+        min_record = self.cfg.auto_stop_min_record_sec
+        threshold = self.cfg.vad_rms_threshold
+        try:
+            while True:
+                await asyncio.sleep(0.2)
+                if self.state != State.RECORDING:
+                    return
+                duration = self.recorder.current_duration()
+                if duration < min_record:
+                    continue
+                recent = self.recorder.peek_recent(0.5)
+                if vad.has_speech(recent, threshold=threshold):
+                    speech_seen = True
+                    continue
+                if not speech_seen:
+                    continue
+                window = self.recorder.peek_recent(silence_sec)
+                if vad.has_speech(window, threshold=threshold):
+                    continue
+                async with self.lock:
+                    if self.state != State.RECORDING:
+                        return
+                    log.info("VAD: %.1fs silence, auto-stopping", silence_sec)
+                    await self._stop_and_dispatch_locked(reason="vad")
+                return
+        except asyncio.CancelledError:
+            return
 
     async def _transcribe_and_output(self, wav: bytes) -> None:
         try:
             text = await transcribe_async(wav, self.cfg)
+        except httpx.ConnectError as exc:
+            log.warning("FLM unreachable at %s: %s", self.cfg.endpoint, exc)
+            output.notify(
+                "flm-voice", f"FLM unreachable ({self.cfg.endpoint})", icon="dialog-error"
+            )
+            self.state = State.IDLE
+            return
         except Exception as exc:
             log.exception("transcription failed")
             output.notify("flm-voice", f"transcription failed: {exc}", icon="dialog-error")
@@ -118,6 +190,18 @@ class Daemon:
                 log.exception("output backend %r failed", backend)
         log.info("transcribed %d chars", len(text))
         self.state = State.IDLE
+
+    async def warmup(self) -> None:
+        if not self.cfg.warmup:
+            return
+        try:
+            wav = silent_wav(1.0, sample_rate=self.cfg.sample_rate)
+            await transcribe_async(wav, self.cfg)
+            log.info("FLM warmup OK")
+        except httpx.ConnectError:
+            log.warning("FLM warmup skipped: %s not reachable", self.cfg.endpoint)
+        except Exception as exc:
+            log.warning("FLM warmup failed: %s", exc)
 
 
 async def _client_handler(
@@ -165,10 +249,15 @@ async def _serve(daemon: Daemon) -> None:
     for sig in (signal.SIGINT, signal.SIGTERM):
         loop.add_signal_handler(sig, daemon.stop_event.set)
 
+    warmup_task = asyncio.create_task(daemon.warmup())
+
     try:
         async with server:
             await daemon.stop_event.wait()
     finally:
+        daemon._cancel_watchdogs()
+        if not warmup_task.done():
+            warmup_task.cancel()
         if daemon.recorder.is_recording:
             await asyncio.to_thread(daemon.recorder.stop)
         sock.unlink(missing_ok=True)
