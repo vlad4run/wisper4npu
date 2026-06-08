@@ -28,6 +28,7 @@ def socket_path() -> Path:
 class Config:
     endpoint: str = "http://localhost:52625"
     model: str = "whisper-v3:turbo"
+    request_timeout_sec: float = 60.0
     language: str | None = None
     languages: list[str] = field(default_factory=lambda: ["ru", "en"])
     sample_rate: int = 16000

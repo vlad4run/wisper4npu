@@ -190,8 +190,9 @@ whisper.npu/
 Optional `$XDG_CONFIG_HOME/flm-voice/config.toml`:
 
 ```toml
-endpoint = "http://localhost:52625"
+endpoint = "http://localhost:52625"   # or a LAN host, e.g. "http://192.168.1.50:52625"
 model = "whisper-v3:turbo"
+request_timeout_sec = 60.0            # HTTP timeout per transcription POST
 language = "ru"                       # ISO-639-1; omit for auto-detect
 languages = ["ru", "en"]              # cycled by `flm-voice lang next`
 sample_rate = 16000
