@@ -1,7 +1,7 @@
 # Setup on a new machine
 
 Quick-reference checklist. Detailed background lives in [README.md](README.md)
-and [../ai370.npu/fastflowlm-docker/README.md](../ai370.npu/fastflowlm-docker/README.md).
+and [../fastflowlm-docker/README.md](../fastflowlm-docker/README.md).
 
 ## 0. Hardware / OS prerequisites
 
@@ -20,7 +20,7 @@ id | grep -q render || sudo usermod -aG render $USER && newgrp render
 ```
 
 If `/dev/accel/accel0` is missing, follow the host-side install in
-[fastflowlm-docker README](../ai370.npu/fastflowlm-docker/README.md).
+[fastflowlm-docker README](../fastflowlm-docker/README.md).
 
 ## 1. System packages (openSUSE)
 
@@ -52,7 +52,7 @@ docker run --rm --device=/dev/accel/accel0 --ulimit memlock=-1:-1 fastflowlm val
 ## 3. Start the FLM backend
 
 ```bash
-cd ~/AI/whisper.npu/deploy
+cd ~/AI/ai370.npu/whisper.npu/deploy
 cp .env.example .env
 # Edit RENDER_GID in .env to the actual host value:
 sed -i "s/^RENDER_GID=.*/RENDER_GID=$(getent group render | cut -d: -f3)/" .env
@@ -71,7 +71,7 @@ Pick **one** path.
 ### 4a. From source (development)
 
 ```bash
-cd ~/AI/whisper.npu
+cd ~/AI/ai370.npu/whisper.npu
 python3 -m venv .venv
 .venv/bin/pip install -e .
 .venv/bin/pytest -q              # 18 passed
@@ -92,7 +92,7 @@ systemctl --user enable --now flm-voice
 ### 4b. From RPM (deployment)
 
 ```bash
-cd ~/AI/whisper.npu
+cd ~/AI/ai370.npu/whisper.npu
 scripts/build-rpm.sh
 sudo zypper install ~/rpmbuild/RPMS/x86_64/flm-voice-*.rpm
 systemctl --user enable --now flm-voice
@@ -101,7 +101,7 @@ systemctl --user enable --now flm-voice
 ## 5. Bind KDE hotkeys
 
 ```bash
-~/AI/whisper.npu/scripts/install-kde-hotkey.sh
+~/AI/ai370.npu/whisper.npu/scripts/install-kde-hotkey.sh
 ```
 
 Follow the printed steps in **System Settings → Shortcuts → Custom
@@ -123,7 +123,7 @@ wl-paste                      # transcript should be in the clipboard
 | Symptom | Cause | Fix |
 |---|---|---|
 | `flm-voice daemon not running` | Daemon not started | `systemctl --user start flm-voice` |
-| `FLM unreachable at http://localhost:52625` | Container down | `cd ~/AI/whisper.npu/deploy && docker compose ps` |
+| `FLM unreachable at http://localhost:52625` | Container down | `cd ~/AI/ai370.npu/whisper.npu/deploy && docker compose ps` |
 | `Permission denied` on `~/.config/flm` | SELinux label | Already handled by `:z` in compose; check `ls -lZ ~/.config/flm` |
 | `Unable to find group render` (docker) | `group_add` used name, not GID | Confirm `RENDER_GID` in `deploy/.env` matches `getent group render` |
 | `WebServer started on port 52625` but `curl localhost:52625` is refused | FLM defaults `--host 127.0.0.1` (container loopback); Docker can't forward to that | Add `--host 0.0.0.0` to the serve command (already in `deploy/compose.yaml`) |

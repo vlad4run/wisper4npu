@@ -46,7 +46,7 @@ Key invariants worth knowing before editing:
 
 - **No local model.** All NPU/Whisper work lives in the FLM container; this repo
   only HTTP-POSTs WAV bytes. The container is a sibling repo:
-  `../ai370.npu/fastflowlm-docker/`. Started via `deploy/compose.yaml` on port
+  `../fastflowlm-docker/`. Started via `deploy/compose.yaml` on port
   `52625`. If it's down, the daemon notifies "FLM unreachable" and stays idle —
   it does not crash.
 - **Blocking I/O is offloaded.** sounddevice `start`/`stop` are sync and run via

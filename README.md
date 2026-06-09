@@ -8,7 +8,7 @@ socket, and `notify-send`.
 
 ## Backend
 
-Transcription runs in [fastflowlm-docker](../ai370.npu/fastflowlm-docker/)
+Transcription runs in [fastflowlm-docker](../fastflowlm-docker/)
 as a long-running OpenAI-compatible API server on port `52625`:
 
 ```bash
@@ -22,7 +22,7 @@ docker run -d --rm \
   fastflowlm serve gemma3:1b --asr 1 --host 0.0.0.0
 ```
 
-See [fastflowlm-docker README](../ai370.npu/fastflowlm-docker/README.md)
+See [fastflowlm-docker README](../fastflowlm-docker/README.md)
 for NPU prerequisites, kernel driver setup, and the Docker image build.
 
 ## Setup
@@ -45,7 +45,7 @@ sudo zypper install wl-clipboard libnotify-tools
 ### 2. Python install
 
 ```bash
-cd /home/vladislav/AI/whisper.npu
+cd /home/vladislav/AI/ai370.npu/whisper.npu
 python3 -m venv .venv
 .venv/bin/pip install -e .
 ```
@@ -102,19 +102,13 @@ and a notification pops up with a preview. Paste with `Ctrl+V`.
 
 ## Architecture
 
-```text
-   KDE Custom Shortcut (Meta+Alt+Space)
-              │ exec
-              ▼
-       flm-voice toggle ──► Unix socket ──► flm-voice daemon (asyncio)
-                                                    │
-                                ┌───────────────────┴───────────────────┐
-                                ▼                                       ▼
-                            Recorder                                Transcriber
-                          (sounddevice)                            (httpx → FLM)
-                                                                        │
-                                                                        ▼
-                                                  Output: wl-copy / wtype / notify-send
+```mermaid
+flowchart TD
+    KDE["KDE Custom Shortcut<br/>(Meta+Alt+Space)"] -->|exec| Toggle["flm-voice toggle"]
+    Toggle -->|Unix socket| Daemon["flm-voice daemon<br/>(asyncio)"]
+    Daemon --> Recorder["Recorder<br/>(sounddevice)"]
+    Daemon --> Transcriber["Transcriber<br/>(httpx → FLM)"]
+    Transcriber --> Output["Output:<br/>wl-copy / wtype / notify-send"]
 ```
 
 Key choices:
